@@ -1,13 +1,11 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Domain\MicroRabbit.Domain.Core\MicroRabbit.Domain.Core.csproj" />
+    <ProjectReference Include="..\..\..\..\Domain\MicroRabbit.Domain.Core\MicroRabbit.Domain.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="MediatR" Version="12.4.1" />
-    <PackageReference Include="newtonsoft.json" Version="13.0.3" />
-    <PackageReference Include="rabbitmq.client" Version="7.0.0" />
   </ItemGroup>
 
   <PropertyGroup>
