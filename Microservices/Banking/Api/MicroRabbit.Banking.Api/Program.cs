@@ -1,5 +1,3 @@
-using Microsoft.EntityFrameworkCore;
-using MicroRabbit.Banking.Data.Context;
 using MicroRabbit.Infra.IoC;
 using MediatR;
 using System.Reflection;
@@ -8,14 +6,6 @@ using Microsoft.OpenApi.Models;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddRazorPages();
-
-builder.Services.AddDbContext<BankingDbContext>(options =>
-    options.UseSqlServer(
-        builder.Configuration.GetConnectionString("BankingDbConnection")
-               .Replace("$BANKING_DB_PASSWORD", Environment.GetEnvironmentVariable("BANKING_DB_PASSWORD"))
-    )
-);
-
 builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssemblies(Assembly.GetExecutingAssembly()));
 builder.Services.AddControllers();
 builder.Services.AddMvc();

@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <PackageReference Include="MediatR" Version="12.4.1" />
+    <PackageReference Include="microsoft.extensions.dependencyinjection" Version="9.0.1" />
     <PackageReference Include="newtonsoft.json" Version="13.0.3" />
     <PackageReference Include="rabbitmq.client" Version="7.0.0" />
   </ItemGroup>
