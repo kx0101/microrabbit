@@ -30,32 +30,39 @@ public sealed class RabbitMQBus : IEventBus
         return _mediator.Send(command);
     }
 
-    public async void Publish<T>(T @event) where T : Event
+    public async Task Publish<T>(T @event) where T : Event
     {
-        var factory = new ConnectionFactory() { HostName = "localhost" };
+        try
+        {
+            var factory = new ConnectionFactory() { HostName = "localhost" };
 
-        using var connection = await factory.CreateConnectionAsync();
-        using var channel = await connection.CreateChannelAsync();
+            using var connection = await factory.CreateConnectionAsync();
+            using var channel = await connection.CreateChannelAsync();
 
-        var eventName = @event.GetType().Name;
+            var eventName = @event.GetType().Name;
 
-        await channel.QueueDeclareAsync(eventName, false, false, false, null);
+            await channel.QueueDeclareAsync(eventName, false, false, false, null);
 
-        var message = JsonConvert.SerializeObject(@event);
-        var body = Encoding.UTF8.GetBytes(message);
+            var message = JsonConvert.SerializeObject(@event);
+            var body = Encoding.UTF8.GetBytes(message);
 
-        await channel.BasicPublishAsync(
-            exchange: "",
-            routingKey: eventName,
-            mandatory: true,
-            basicProperties: new BasicProperties
-            {
-                ContentType = "text/plain",
-                DeliveryMode = DeliveryModes.Persistent
-            },
-            body: body,
-            cancellationToken: default
-        );
+            await channel.BasicPublishAsync(
+                exchange: "",
+                routingKey: eventName,
+                mandatory: true,
+                basicProperties: new BasicProperties
+                {
+                    ContentType = "text/plain",
+                    DeliveryMode = DeliveryModes.Persistent
+                },
+                body: body,
+                cancellationToken: default
+            );
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Failed to publish event {@event.GetType().Name}", ex);
+        }
     }
 
     public void Subscribe<T, EH>()
@@ -120,27 +127,52 @@ public sealed class RabbitMQBus : IEventBus
 
     private async Task ProcessEvent(string eventName, string message)
     {
-        if (_handlers.ContainsKey(eventName))
+        if (!_handlers.ContainsKey(eventName))
         {
-            using (var scope = _serviceScopeFactory.CreateScope())
+            return;
+        }
+
+        using var scope = _serviceScopeFactory.CreateScope();
+        var subscriptions = _handlers[eventName];
+
+        foreach (var subscription in subscriptions)
+        {
+            var handler = scope.ServiceProvider.GetService(subscription);
+            if (handler is null)
             {
-                var subscriptions = _handlers[eventName];
-
-                foreach (var subscription in subscriptions)
-                {
-                    var handler = scope.ServiceProvider.GetService(subscription);
-                    if (handler is null)
-                    {
-                        continue;
-                    }
-
-                    var eventType = _eventTypes.SingleOrDefault(et => et.Name == eventName);
-                    var @event = JsonConvert.DeserializeObject(message, eventType);
-                    var concreteType = typeof(IEventHandler<>).MakeGenericType(eventType);
-
-                    await (Task)concreteType.GetMethod("Handle").Invoke(handler, new object[] { @event });
-                }
+                continue;
             }
+
+            var eventType = _eventTypes.SingleOrDefault(et => et.Name == eventName);
+            if (eventType is null)
+            {
+                throw new InvalidOperationException($"Event type '{eventName}' not found in registered event types.");
+            }
+
+            var @event = JsonConvert.DeserializeObject(message, eventType);
+            if (@event is null)
+            {
+                throw new InvalidOperationException($"Failed to deserialize message to event type '{eventType.Name}'.");
+            }
+
+            var concreteType = typeof(IEventHandler<>).MakeGenericType(eventType);
+            if (concreteType is null)
+            {
+                throw new InvalidOperationException($"Handler type for event '{eventName}' not found.");
+            }
+
+            var handlerMethod = concreteType.GetMethod("Handle");
+            if (handlerMethod is null)
+            {
+                throw new InvalidOperationException($"Handle method not found for handler type '{concreteType.Name}'.");
+            }
+
+            if (!handlerMethod.IsPublic || handlerMethod.ReturnType != typeof(Task))
+            {
+                throw new InvalidOperationException($"Handle method must be public and return Task in handler type '{concreteType.Name}'.");
+            }
+
+            await (Task)handlerMethod.Invoke(handler, new object[] { @event });
         }
     }
 }
